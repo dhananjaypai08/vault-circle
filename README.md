@@ -37,7 +37,6 @@ vaultcircle/
 │       ├── DeployMocks.s.sol
 │       ├── CreateTestVault.s.sol
 │       ├── DeployMorphoCompounderStrategyFactory.s.sol
-│       └── DeployOctantImpl.s.sol
 ├── frontend/
 │   ├── components/
 │   ├── app/
@@ -104,14 +103,6 @@ Deploys the factory that creates Morpho yield-compounding strategies.
 
 ```bash
 forge script contracts/scripts/DeployMorphoCompounderStrategyFactory.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
-```
-
-### 5. DeployOctantImpl.s.sol
-
-Deploys either the vault factory or Yield Donating Strategy (YDS) implementation depending on import.
-
-```bash
-forge script contracts/scripts/DeployOctantImpl.s.sol --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
 ```
 
 ---
@@ -202,16 +193,13 @@ npm run contracts:format:check
 2. **Deploy GroupVaultFactory**
    Using `DeployGroupVaultSystem.s.sol`.
 
-3. **Deploy YDS Strategy**
-   Run `DeployOctantImpl.s.sol`.
-
-4. **Deploy Morpho Compounder Factory**
+3. **Deploy Morpho Compounder Factory**
    Run `DeployMorphoCompounderStrategyFactory.s.sol`.
 
-5. **Create a Test Vault**
+4. **Create a Test Vault**
    Run `CreateTestVault.s.sol` with correct environment variables.
 
-6. **Link Frontend**
+5. **Link Frontend**
    Update contract addresses in frontend and start the UI.
 
 

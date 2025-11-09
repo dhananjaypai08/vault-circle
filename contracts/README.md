@@ -54,7 +54,6 @@ Located in `contracts/scripts/`:
 | --------------------------------------------- | ------------------------------------------------------------- |
 | `DeployGroupVaultSystem.s.sol`                | Deploys the `GroupVaultFactory` and mock vaults (for Tatara). |
 | `DeployMorphoCompounderStrategyFactory.s.sol` | Deploys the `MorphoCompounderStrategyFactory`.                |
-| `DeployOctantImpl.s.sol`                      | Deploys the `YieldDonatingTokenizedStrategy` implementation.  |
 | `CreateTestVault.s.sol`                       | Creates a sample vault using the deployed factory and mocks.  |
 
 Run any script using Foundry:
@@ -107,7 +106,6 @@ contracts/
 ├── scripts/
 │   ├── DeployGroupVaultSystem.s.sol
 │   ├── DeployMorphoCompounderStrategyFactory.s.sol
-│   ├── DeployOctantImpl.s.sol
 │   └── CreateTestVault.s.sol
 ├── test/
 │   ├── GroupVault.t.sol
