@@ -56,8 +56,8 @@ export default function VaultCard({ address, onSelect }: VaultCardProps) {
 
   if (!vaultInfo || !performance) return null;
 
-  const totalAssets = (performance as any).totalAssets || 0n;
-  const yieldDonated = (performance as any).yieldDonated || 0n;
+  const totalAssets = performance.totalDonated || 0n;
+  const yieldDonated = performance.totalYield || 0n;
   const memberCount = members?.length || 0;
 
   return (
