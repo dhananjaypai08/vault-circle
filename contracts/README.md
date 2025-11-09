@@ -1,66 +1,125 @@
-## Foundry
+# VaultCircle Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+VaultCircle provides a modular smart contract system for creating **group-managed yield vaults** that redirect profits to **public goods** through **yield-donating strategies (YDS)**.
+It integrates **Octant-v2**, **Morpho-v2**, and **Katana Vaults** for optimized yield routing and collaborative DeFi experiences.
 
-Foundry consists of:
+---
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+## Overview
 
-## Documentation
+The contracts are split into key modules:
 
-https://book.getfoundry.sh/
+### Core
 
-## Usage
+* **GroupVault.sol** – ERC4626-compatible vault that manages group deposits, share accounting, and donation routing.
+* **GroupVaultFactory.sol** – Factory for deterministic deployment and management of multiple group vaults.
 
-### Build
+### Strategies
 
-```shell
-$ forge build
+* **MorphoCompounderStrategy.sol** – A yield-donating strategy leveraging **Morpho Compounder** built on top of Aave-v3.
+* **YieldDonatingTokenizedStrategy.sol** – Base strategy from **Octant-v2-core**, distributing yield to donation recipients.
+
+### Mocks
+
+* **MockERC20.sol** – Simulates ERC20 assets (e.g., Mock USDC).
+* **MockKatanaVault.sol** – Mimics an ERC4626 vault on the **Tatara Testnet** for local testing.
+
+### Factories
+
+* **MorphoCompounderStrategyFactory.sol** – Deterministically deploys strategy contracts using **CREATE2**.
+* **BaseStrategyFactory.sol** – Provides shared deployment logic, event tracking, and address prediction.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+* [Foundry](https://book.getfoundry.sh/)
+* Node.js ≥ 18
+* Katana testnet RPC (or local anvil fork)
+
+```bash
+forge install
+npm install
 ```
 
-### Test
+---
 
-```shell
-$ forge test
+## Deployment Scripts
+
+Located in `contracts/scripts/`:
+
+| Script                                        | Description                                                   |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| `DeployGroupVaultSystem.s.sol`                | Deploys the `GroupVaultFactory` and mock vaults (for Tatara). |
+| `DeployMorphoCompounderStrategyFactory.s.sol` | Deploys the `MorphoCompounderStrategyFactory`.                |
+| `DeployOctantImpl.s.sol`                      | Deploys the `YieldDonatingTokenizedStrategy` implementation.  |
+| `CreateTestVault.s.sol`                       | Creates a sample vault using the deployed factory and mocks.  |
+
+Run any script using Foundry:
+
+```bash
+forge script contracts/scripts/DeployGroupVaultSystem.s.sol --rpc-url $RPC_URL --broadcast
 ```
 
-### Format
+**Example Environment Variables**
 
-```shell
-$ forge fmt
+```bash
+export PRIVATE_KEY=0xabc...
+export RPC_URL=https://rpc.tatara.katana.network
+export DONATION_RECIPIENT=0xYourAddress
 ```
 
-### Gas Snapshots
+---
 
-```shell
-$ forge snapshot
+## Running Tests
+
+Execute all tests:
+
+```bash
+forge test -vvv
 ```
 
-### Anvil
+The tests validate deterministic factory deployment, CREATE2 salts, and vault initialization logic.
+Some tests fail on purpose due to **mock contract limitations** (since Tatara testnet doesn’t host live Yearn or Morpho vaults yet).
 
-```shell
-$ anvil
+### Current Failing Cases
+
+| Test                                            | Reason                                                                                                        | Gas     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------- |
+| `test_PredictStrategyAddress_MatchesDeployed()` | Fails due to **call to non-contract address** `0x56c2249750C06DFc49798F01Aa77354040FE331E` (mock Yearn vault) | 124,021 |
+| `test_Revert_WhenDuplicateParametersUsed()`     | Fails due to **duplicate parameter hash** and missing underlying contract code                                | 113,015 |
+
+These failures are expected while testing on Tatara’s simulated environment and confirm proper **error propagation** from `BaseStrategyFactory`.
+
+---
+
+## Project Structure
+
+```
+contracts/
+├── src/
+│   ├── core/
+│   ├── factories/
+│   ├── strategies/
+│   └── interfaces/
+├── scripts/
+│   ├── DeployGroupVaultSystem.s.sol
+│   ├── DeployMorphoCompounderStrategyFactory.s.sol
+│   ├── DeployOctantImpl.s.sol
+│   └── CreateTestVault.s.sol
+├── test/
+│   ├── GroupVault.t.sol
+│   └── MorphoCompounderStrategyFactory.t.sol
+└── foundry.toml
 ```
 
-### Deploy
+---
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
+## Notes
 
-### Cast
+* The testnet setup uses **MockUSDC** and **MockKatanaVault** to simulate real vault interactions.
+* On mainnet, these are replaced with live **Aave-v3** and **Morpho Compounder** integrations.
+* Frontend interaction is handled via **Wagmi** and **RainbowKit** through `frontend/utils/contracts.ts`.
 
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
