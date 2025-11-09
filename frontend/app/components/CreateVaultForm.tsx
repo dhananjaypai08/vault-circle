@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { FACTORY_ADDRESS, FACTORY_ABI, ASSETS } from '../utils/contracts';
+import { FACTORY_ADDRESS, FACTORY_ABI, ASSETS, getAssetConfig } from '../utils/contracts';
 import { parseInputAmount } from '../utils/utils';
 import { Address } from 'viem';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { AlertCircle, Check } from 'lucide-react';
 
 interface CreateVaultFormProps {
   onSuccess: () => void;
@@ -24,16 +24,19 @@ export default function CreateVaultForm({ onSuccess }: CreateVaultFormProps) {
     depositCap: '',
   });
 
-  const { writeContract, data: hash, isPending } = useWriteContract();
+  const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const selectedAsset = getAssetConfig(formData.asset);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const assetInfo = ASSETS[formData.asset];
-    const minDeposit = parseInputAmount(formData.minDeposit, assetInfo.decimals);
+    if (!selectedAsset) return;
+
+    const minDeposit = parseInputAmount(formData.minDeposit, selectedAsset.decimals);
     const depositCap = formData.depositCap
-      ? parseInputAmount(formData.depositCap, assetInfo.decimals)
+      ? parseInputAmount(formData.depositCap, selectedAsset.decimals)
       : 0n;
 
     writeContract({
@@ -42,8 +45,8 @@ export default function CreateVaultForm({ onSuccess }: CreateVaultFormProps) {
       functionName: 'createVault',
       args: [
         formData.name,
-        assetInfo.vault as Address,
-        assetInfo.vault as Address,
+        selectedAsset.tokenAddress,
+        selectedAsset.vaultAddress,
         formData.donationRecipient as Address,
         minDeposit,
         depositCap,
@@ -52,78 +55,71 @@ export default function CreateVaultForm({ onSuccess }: CreateVaultFormProps) {
   };
 
   if (isSuccess) {
-    setTimeout(() => onSuccess(), 2000);
+    setTimeout(() => {
+      onSuccess();
+      setFormData({
+        name: '',
+        asset: 'USDC',
+        donationRecipient: '',
+        minDeposit: '',
+        depositCap: '',
+      });
+    }, 2000);
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-8 space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Create New Vault</h2>
+    <div className="max-w-3xl mx-auto">
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold tracking-tight mb-2">Create Vault</h2>
         <p className="text-[var(--color-muted-foreground)]">
-          Set up a collaborative vault where yields are donated to your chosen recipient
+          Configure a new group vault with automated yield donations
         </p>
       </div>
 
-      <Card className="shadow-lg">
+      <Card className="border-[var(--color-border)]">
         <CardHeader>
           <CardTitle>Vault Configuration</CardTitle>
-          <CardDescription>
-            Configure your vault parameters. All fields are required unless noted.
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Vault Name */}
             <div className="space-y-2">
-              <Label htmlFor="name">
-                Vault Name
-              </Label>
+              <Label htmlFor="name">Vault Name</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g., Friends USDC Vault"
+                placeholder="e.g. Climate Action Fund"
                 required
               />
-              <p className="text-xs text-[var(--color-muted-foreground)]">
-                A friendly name for your vault
-              </p>
             </div>
-
-            <Separator />
 
             {/* Asset Selection */}
             <div className="space-y-2">
-              <Label htmlFor="asset">
-                Asset
-              </Label>
+              <Label htmlFor="asset">Asset</Label>
               <select
                 id="asset"
                 value={formData.asset}
-                onChange={(e) =>
-                  setFormData({ ...formData, asset: e.target.value as keyof typeof ASSETS })
-                }
-                className="flex h-10 w-full rounded-lg border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm transition-colors hover:border-[var(--color-border-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                onChange={(e) => setFormData({ ...formData, asset: e.target.value as keyof typeof ASSETS })}
+                className="flex h-10 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent"
                 required
               >
                 {Object.keys(ASSETS).map((asset) => (
-                  <option key={asset} value={asset} className="bg-[var(--color-card)]">
+                  <option key={asset} value={asset}>
                     {asset}
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-[var(--color-muted-foreground)]">
-                Choose the asset type for deposits
-              </p>
+              {selectedAsset && (
+                <p className="text-sm text-[var(--color-muted-foreground)]">
+                  Strategy: Katana {selectedAsset.symbol} Vault (Auto-selected)
+                </p>
+              )}
             </div>
-
-            <Separator />
 
             {/* Donation Recipient */}
             <div className="space-y-2">
-              <Label htmlFor="recipient">
-                Donation Recipient
-              </Label>
+              <Label htmlFor="recipient">Donation Recipient</Label>
               <Input
                 id="recipient"
                 value={formData.donationRecipient}
@@ -132,64 +128,83 @@ export default function CreateVaultForm({ onSuccess }: CreateVaultFormProps) {
                 className="font-mono text-sm"
                 required
               />
-              <p className="text-xs text-[var(--color-muted-foreground)]">
-                Address that will receive all donated yields
+              <p className="text-sm text-[var(--color-muted-foreground)]">
+                Address that will receive all generated yields
               </p>
             </div>
-
-            <Separator />
 
             {/* Parameters */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="minDeposit">
-                  Minimum Deposit
-                </Label>
-                <Input
-                  id="minDeposit"
-                  type="text"
-                  value={formData.minDeposit}
-                  onChange={(e) => setFormData({ ...formData, minDeposit: e.target.value })}
-                  placeholder="100"
-                  required
-                />
-                <p className="text-xs text-[var(--color-muted-foreground)]">
-                  Minimum amount per deposit
-                </p>
+                <Label htmlFor="minDeposit">Minimum Deposit</Label>
+                <div className="relative">
+                  <Input
+                    id="minDeposit"
+                    type="text"
+                    value={formData.minDeposit}
+                    onChange={(e) => setFormData({ ...formData, minDeposit: e.target.value })}
+                    placeholder="100"
+                    required
+                    className="pr-16"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
+                    {selectedAsset?.symbol}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="depositCap">Deposit Cap</Label>
-                <Input
-                  id="depositCap"
-                  type="text"
-                  value={formData.depositCap}
-                  onChange={(e) => setFormData({ ...formData, depositCap: e.target.value })}
-                  placeholder="0 (unlimited)"
-                />
-                <p className="text-xs text-[var(--color-muted-foreground)]">
-                  Maximum total deposits (optional)
-                </p>
+                <Label htmlFor="depositCap">Deposit Cap (Optional)</Label>
+                <div className="relative">
+                  <Input
+                    id="depositCap"
+                    type="text"
+                    value={formData.depositCap}
+                    onChange={(e) => setFormData({ ...formData, depositCap: e.target.value })}
+                    placeholder="0 = unlimited"
+                    className="pr-16"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[var(--color-muted-foreground)]">
+                    {selectedAsset?.symbol}
+                  </div>
+                </div>
               </div>
             </div>
 
-            <Separator />
+            {/* Error Display */}
+            {error && (
+              <div className="rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 p-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-red-900 dark:text-red-100">
+                      Transaction Failed
+                    </p>
+                    <p className="text-sm text-red-700 dark:text-red-300">{error.message}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Submit Button */}
-            <div className="space-y-4 pt-2">
+            <div className="space-y-4">
               <Button
                 type="submit"
                 loading={isPending || isConfirming}
-                disabled={isPending || isConfirming}
+                disabled={isPending || isConfirming || !selectedAsset}
                 className="w-full"
-                size="lg"
               >
                 {isPending || isConfirming ? 'Creating Vault...' : 'Create Vault'}
               </Button>
 
               {isSuccess && (
-                <div className="p-4 rounded-lg bg-[var(--color-success)]/10 border border-[var(--color-success)]/20 text-[var(--color-success)] text-sm text-center">
-                  Vault created successfully! Redirecting...
+                <div className="rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-4">
+                  <div className="flex items-center gap-3">
+                    <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                      Vault created successfully
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
