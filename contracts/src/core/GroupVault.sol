@@ -1,64 +1,109 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.25;
 
-import {IERC20} from "../../interfaces/IERC20.sol";
-import {IERC4626} from "../../interfaces/IERC4626.sol";
+import {IERC4626} from "@morpho-v2/interfaces/IERC4626.sol";
 import {IGroupVault} from "../../interfaces/IGroupVault.sol";
 import {GroupVaultTypes} from "../../types/GroupVaultTypes.sol";
 
 /**
  * @title GroupVault
- * @notice A vault where groups can pool funds and donate yields to chosen recipients
- * @dev Implements Yield Donating Strategy (YDS) pattern - yields go to donation recipient
- * @author Dhananjay - Smart Contract Engineer
+ * @notice Group vault with automatic yield donation to specified recipient
+ * @dev Implements Yield Donating Strategy (YDS) pattern similar to Octant
+ *
+ * KEY FEATURES:
+ * - Principal preservation: Depositors' principal always protected
+ * - Yield donation: All yields automatically donated to recipient
+ * - ERC4626 integration: Works with any ERC4626 vault (Katana vaults)
+ * - Group pooling: Multiple users can pool funds together
+ *
+ * ARCHITECTURE:
+ * Users deposit → GroupVault → Katana ERC4626 Vault → Generates Yield
+ * Yields harvested → Minted as shares to donation recipient
  */
 contract GroupVault is IGroupVault {
-    // ============ Constants ============
-    
-    uint256 private constant PRECISION = 1e18;
-    uint256 private constant MAX_BPS = 10000;
-
-    // ============ Storage ============
-    
+    // Vault Configuration
     string public name;
-    address public immutable asset;
-    address public immutable underlyingVault; // Katana ERC4626 vault (e.g., IbvbUSDC)
-    address public donationRecipient;
-    address public admin;
-    
-    uint256 public minDeposit;
-    uint256 public depositCap;
-    uint256 public createdAt;
-    bool public isPaused;
+    address public asset; // Underlying ERC20 token
+    address public underlyingVault; // ERC4626 strategy (Katana vault)
+    address public donationRecipient; // Receives donated yields
+    address public admin; // Vault administrator
+    uint256 public minDeposit; // Minimum deposit amount
+    uint256 public depositCap; // Maximum total deposits (0 = unlimited)
+    bool public isPaused; // Pause state
+    uint256 public createdAt; // Creation timestamp
 
-    // Share accounting
-    mapping(address => uint256) private _shares;
+    // ERC20-like State
+    string public symbol;
+    uint8 public constant decimals = 18;
     uint256 private _totalShares;
+    mapping(address => uint256) private _balances;
 
-    // Member tracking
+    // Member Tracking
     mapping(address => GroupVaultTypes.Member) private _members;
-    address[] private _memberList;
     mapping(address => bool) private _isMember;
+    address[] private _memberList;
 
-    // Performance tracking
-    uint256 public totalDeposited;
-    uint256 public totalWithdrawn;
+    // Yield Tracking
+    uint256 public lastHarvestTime;
     uint256 public cumulativeYield;
     uint256 public cumulativeDonations;
-    uint256 public lastHarvestTime;
     uint256 private _lastKnownAssets;
-
     GroupVaultTypes.DonationRecord[] private _donationHistory;
 
-    // ============ Modifiers ============
-    
+    // Deposit/Withdraw Tracking
+    uint256 public totalDeposited;
+    uint256 public totalWithdrawn;
+
+    /**
+     * @notice Initialize a new Group Vault
+     * @param name_ Vault name
+     * @param asset_ Underlying asset (ERC20)
+     * @param strategy_ ERC4626 strategy vault
+     * @param donationRecipient_ Yield recipient
+     * @param admin_ Vault administrator
+     * @param minDeposit_ Minimum deposit amount
+     * @param depositCap_ Deposit cap (0 = unlimited)
+     */
+    constructor(
+        string memory name_,
+        address asset_,
+        address strategy_,
+        address donationRecipient_,
+        address admin_,
+        uint256 minDeposit_,
+        uint256 depositCap_
+    ) {
+        if (asset_ == address(0)) revert ZeroAddress();
+        if (strategy_ == address(0)) revert ZeroAddress();
+        if (donationRecipient_ == address(0)) revert ZeroAddress();
+        if (admin_ == address(0)) revert ZeroAddress();
+        if (bytes(name_).length == 0) revert InvalidVaultName();
+        if (minDeposit_ == 0) revert InvalidMinDeposit();
+
+        if (IERC4626(strategy_).asset() != asset_) revert InvalidStrategy();
+
+        name = name_;
+        symbol = string(abi.encodePacked("gv", name_));
+        asset = asset_;
+        underlyingVault = strategy_;
+        donationRecipient = donationRecipient_;
+        admin = admin_;
+        minDeposit = minDeposit_;
+        depositCap = depositCap_;
+        createdAt = block.timestamp;
+        lastHarvestTime = block.timestamp;
+        _lastKnownAssets = 0;
+
+        emit VaultCreated(address(this), name_, admin_, asset_);
+    }
+
     modifier onlyAdmin() {
         if (msg.sender != admin) revert Unauthorized();
         _;
     }
 
     modifier whenNotPaused() {
-        if (isPaused) revert VaultPaused(); 
+        if (isPaused) revert VaultPaused();
         _;
     }
 
@@ -67,77 +112,40 @@ contract GroupVault is IGroupVault {
         _;
     }
 
-    // ============ Constructor ============
-    
-    constructor(
-        string memory _name,
-        address _asset,
-        address _underlyingVault,
-        address _donationRecipient,
-        address _admin,
-        uint256 _minDeposit,
-        uint256 _depositCap
-    ) {
-        if (_asset == address(0)) revert ZeroAddress();
-        if (_underlyingVault == address(0)) revert ZeroAddress();
-        if (_donationRecipient == address(0)) revert ZeroAddress();
-        if (_admin == address(0)) revert ZeroAddress();
-
-        // Verify vault asset matches
-        if (IERC4626(_underlyingVault).asset() != _asset) revert InvalidStrategy();
-
-        name = _name;
-        asset = _asset;
-        underlyingVault = _underlyingVault;
-        donationRecipient = _donationRecipient;
-        admin = _admin;
-        minDeposit = _minDeposit;
-        depositCap = _depositCap;
-        createdAt = block.timestamp;
-        lastHarvestTime = block.timestamp;
-
-        // Approve underlying vault to spend assets
-        IERC20(_asset).approve(_underlyingVault, type(uint256).max);
-
-        emit VaultCreated(address(this), _name, _admin, _asset);
-    }
-
-    // ============ External Functions ============
-    
     /**
      * @notice Deposit assets into the vault
+     * @dev Assets are deposited into underlying ERC4626 strategy
      * @param assets Amount of assets to deposit
-     * @param receiver Address to receive shares
+     * @param receiver Address to receive vault shares
      * @return shares Amount of shares minted
      */
-    function deposit(uint256 assets, address receiver) 
-        external 
-        whenNotPaused 
-        returns (uint256 shares) 
-    {
+    function deposit(
+        uint256 assets,
+        address receiver
+    ) external whenNotPaused returns (uint256 shares) {
         if (assets == 0) revert ZeroAmount();
-        if (assets < minDeposit) revert InsufficientDeposit(minDeposit, assets);
         if (receiver == address(0)) revert ZeroAddress();
+        if (assets < minDeposit) revert InsufficientDeposit(minDeposit, assets);
 
-        // Check deposit cap
         if (depositCap > 0) {
-            uint256 newTotal = totalAssets() + assets;
-            if (newTotal > depositCap) revert DepositCapReached(depositCap, newTotal);
+            uint256 newTotal = totalDeposited + assets;
+            if (newTotal > depositCap) {
+                revert DepositCapReached(depositCap, newTotal);
+            }
         }
 
-        // Calculate shares to mint
-        shares = convertToShares(assets);
-        if (shares == 0) revert ZeroAmount();
+        // Calculate shares (1:1 ratio for principal preservation)
+        shares = assets;
 
-        // Transfer assets from sender
-        bool success = IERC20(asset).transferFrom(msg.sender, address(this), assets);
-        if (!success) revert TransferFailed();
+        _safeTransferFrom(asset, msg.sender, address(this), assets);
 
-        // Deposit into underlying vault
-        uint256 vaultShares = IERC4626(underlyingVault).deposit(assets, address(this));
+        _safeApprove(asset, underlyingVault, assets);
+        uint256 vaultShares = IERC4626(underlyingVault).deposit(
+            assets,
+            address(this)
+        );
         require(vaultShares > 0, "No vault shares received");
 
-        // Update member info
         if (!_isMember[receiver]) {
             _addMember(receiver);
         }
@@ -146,11 +154,10 @@ contract GroupVault is IGroupVault {
         member.totalDeposited += assets;
         member.shares += shares;
 
-        // Mint shares
         _mint(receiver, shares);
 
-        // Update tracking
         totalDeposited += assets;
+        _lastKnownAssets = totalAssets();
 
         emit Deposit(msg.sender, receiver, assets, shares);
 
@@ -159,35 +166,38 @@ contract GroupVault is IGroupVault {
 
     /**
      * @notice Withdraw assets from the vault
+     * @dev Burns shares and withdraws from underlying strategy
      * @param shares Amount of shares to burn
      * @param receiver Address to receive assets
      * @param owner Address of share owner
      * @return assets Amount of assets withdrawn
      */
-    function withdraw(uint256 shares, address receiver, address owner) 
-        external 
-        returns (uint256 assets) 
-    {
+    function withdraw(
+        uint256 shares,
+        address receiver,
+        address owner
+    ) external returns (uint256 assets) {
         if (shares == 0) revert ZeroAmount();
         if (receiver == address(0)) revert ZeroAddress();
         if (msg.sender != owner && msg.sender != admin) revert Unauthorized();
         if (!_isMember[owner]) revert MemberNotFound(owner);
 
         GroupVaultTypes.Member storage member = _members[owner];
-        if (member.shares < shares) revert InsufficientShares(shares, member.shares);
+        if (member.shares < shares)
+            revert InsufficientShares(shares, member.shares);
 
-        // Calculate assets to return
-        assets = convertToAssets(shares);
-        if (assets == 0) revert ZeroAmount();
+        // Calculate assets to return (1:1 ratio for principal)
+        assets = shares; // Principal preservation
 
-        // Burn shares
         _burn(owner, shares);
 
-        // Update member info
         member.shares -= shares;
 
         // Withdraw from underlying vault
-        uint256 vaultSharesNeeded = IERC4626(underlyingVault).convertToShares(assets);
+        // We need to convert our assets to vault shares to redeem
+        uint256 vaultSharesNeeded = IERC4626(underlyingVault).convertToShares(
+            assets
+        );
         uint256 assetsReceived = IERC4626(underlyingVault).redeem(
             vaultSharesNeeded,
             receiver,
@@ -196,8 +206,9 @@ contract GroupVault is IGroupVault {
 
         // Update tracking
         totalWithdrawn += assetsReceived;
+        _lastKnownAssets = totalAssets();
 
-        emit Withdraw(msg.sender, receiver, assetsReceived, shares);
+        emit Withdraw(msg.sender, receiver, owner, assetsReceived, shares);
 
         return assetsReceived;
     }
@@ -217,8 +228,9 @@ contract GroupVault is IGroupVault {
 
             if (yieldGenerated > 0) {
                 // Mint shares to donation recipient equivalent to yield value
-                uint256 donationShares = (yieldGenerated * _totalShares) / expectedAssets;
-                
+                // This preserves the 1:1 asset:share ratio for original depositors
+                uint256 donationShares = yieldGenerated;
+
                 if (!_isMember[donationRecipient]) {
                     _addMember(donationRecipient);
                 }
@@ -227,19 +239,30 @@ contract GroupVault is IGroupVault {
                 _members[donationRecipient].shares += donationShares;
 
                 // Record donation
-                _donationHistory.push(GroupVaultTypes.DonationRecord({
-                    id: _donationHistory.length,
-                    amount: yieldGenerated,
-                    recipient: donationRecipient,
-                    timestamp: block.timestamp,
-                    yieldSourced: yieldGenerated
-                }));
+                _donationHistory.push(
+                    GroupVaultTypes.DonationRecord({
+                        id: _donationHistory.length,
+                        amount: yieldGenerated,
+                        recipient: donationRecipient,
+                        timestamp: block.timestamp,
+                        yieldSourced: yieldGenerated
+                    })
+                );
 
                 cumulativeYield += yieldGenerated;
                 cumulativeDonations += yieldGenerated;
 
-                emit YieldHarvested(_donationHistory.length - 1, yieldGenerated, block.timestamp);
-                emit YieldDonated(_donationHistory.length - 1, donationRecipient, yieldGenerated, block.timestamp);
+                emit YieldHarvested(
+                    _donationHistory.length - 1,
+                    yieldGenerated,
+                    block.timestamp
+                );
+                emit YieldDonated(
+                    _donationHistory.length - 1,
+                    donationRecipient,
+                    yieldGenerated,
+                    block.timestamp
+                );
             }
         }
 
@@ -250,151 +273,269 @@ contract GroupVault is IGroupVault {
     }
 
     // ============ View Functions ============
-    
-    function getVaultInfo() external view returns (GroupVaultTypes.VaultConfig memory) {
-        return GroupVaultTypes.VaultConfig({
-            name: name,
-            asset: asset,
-            strategy: underlyingVault,
-            donationRecipient: donationRecipient,
-            admin: admin,
-            minDeposit: minDeposit,
-            depositCap: depositCap,
-            isPaused: isPaused
-        });
-    }
 
-    function getMemberInfo(address member) external view returns (GroupVaultTypes.Member memory) {
-        if (!_isMember[member]) revert MemberNotFound(member);
-        return _members[member];
-    }
-
-    function getPerformance() external view returns (GroupVaultTypes.PerformanceReport memory) {
-        return GroupVaultTypes.PerformanceReport({
-            timestamp: block.timestamp,
-            totalAssets: totalAssets(),
-            totalShares: _totalShares,
-            pricePerShare: _calculatePricePerShare(),
-            yieldGenerated: cumulativeYield,
-            yieldDonated: cumulativeDonations
-        });
+    /**
+     * @notice Get total assets in vault (including strategy)
+     * @return Total assets
+     */
+    function totalAssets() public view returns (uint256) {
+        uint256 vaultShares = IERC4626(underlyingVault).balanceOf(
+            address(this)
+        );
+        return IERC4626(underlyingVault).convertToAssets(vaultShares);
     }
 
     /**
-     * @notice Get total assets managed by vault
-     * @return Total assets in underlying vault + idle assets
+     * @notice Get total shares issued
+     * @return Total shares
      */
-    function totalAssets() public view returns (uint256) {
-        uint256 vaultShares = IERC20(underlyingVault).balanceOf(address(this));
-        uint256 assetsInVault = IERC4626(underlyingVault).convertToAssets(vaultShares);
-        uint256 idleAssets = IERC20(asset).balanceOf(address(this));
-        return assetsInVault + idleAssets;
-    }
-
     function totalShares() external view returns (uint256) {
         return _totalShares;
     }
 
     /**
-     * @notice Convert assets to shares
+     * @notice Convert assets to shares (1:1 for principal)
+     * @param assets Amount of assets
+     * @return shares Equivalent shares
      */
-    function convertToShares(uint256 assets) public view returns (uint256) {
-        uint256 supply = _totalShares;
-        if (supply == 0) {
-            return assets; // 1:1 for first deposit
-        }
-        
-        uint256 totalAssetsValue = totalAssets();
-        if (totalAssetsValue == 0) {
-            return assets;
-        }
-        
-        return (assets * supply) / totalAssetsValue;
+    function convertToShares(
+        uint256 assets
+    ) public pure returns (uint256 shares) {
+        return assets; // 1:1 ratio for principal preservation
     }
 
     /**
-     * @notice Convert shares to assets
+     * @notice Convert shares to assets (1:1 for principal)
+     * @param shares Amount of shares
+     * @return assets Equivalent assets
      */
-    function convertToAssets(uint256 shares) public view returns (uint256) {
-        uint256 supply = _totalShares;
-        if (supply == 0) {
-            return 0;
-        }
-        
-        return (shares * totalAssets()) / supply;
+    function convertToAssets(
+        uint256 shares
+    ) public pure returns (uint256 assets) {
+        return shares; // 1:1 ratio for principal preservation
     }
 
+    /**
+     * @notice Get vault configuration
+     * @return Vault config struct
+     */
+    function getVaultInfo()
+        external
+        view
+        returns (GroupVaultTypes.VaultConfig memory)
+    {
+        return
+            GroupVaultTypes.VaultConfig({
+                name: name,
+                asset: asset,
+                strategy: underlyingVault,
+                donationRecipient: donationRecipient,
+                admin: admin,
+                minDeposit: minDeposit,
+                depositCap: depositCap,
+                isPaused: isPaused,
+                createdAt: createdAt
+            });
+    }
+
+    /**
+     * @notice Get member information
+     * @param member Address of member
+     * @return Member info struct
+     */
+    function getMemberInfo(
+        address member
+    ) external view returns (GroupVaultTypes.Member memory) {
+        return _members[member];
+    }
+
+    /**
+     * @notice Get vault performance metrics
+     * @return Performance report struct
+     */
+    function getPerformance()
+        external
+        view
+        returns (GroupVaultTypes.PerformanceReport memory)
+    {
+        uint256 total = totalAssets();
+        uint256 pricePerShare = _totalShares > 0
+            ? (total * 1e18) / _totalShares
+            : 1e18;
+
+        return
+            GroupVaultTypes.PerformanceReport({
+                totalAssets: total,
+                totalShares: _totalShares,
+                yieldGenerated: cumulativeYield,
+                yieldDonated: cumulativeDonations,
+                pricePerShare: pricePerShare,
+                memberCount: _memberList.length
+            });
+    }
+
+    /**
+     * @notice Get all members
+     * @return Array of member addresses
+     */
     function getMembers() external view returns (address[] memory) {
         return _memberList;
     }
 
-    function getDonationHistory() external view returns (GroupVaultTypes.DonationRecord[] memory) {
+    /**
+     * @notice Get donation history
+     * @return Array of donation records
+     */
+    function getDonationHistory()
+        external
+        view
+        returns (GroupVaultTypes.DonationRecord[] memory)
+    {
         return _donationHistory;
     }
 
-    function isMember(address account) external view returns (bool) {
-        return _isMember[account];
+    /**
+     * @notice Get user's balance
+     * @param account Address to query
+     * @return Balance of shares
+     */
+    function balanceOf(address account) external view returns (uint256) {
+        return _balances[account];
     }
 
-    function sharesOf(address account) external view returns (uint256) {
-        return _shares[account];
+    /**
+     * @notice Update strategy vault
+     * @param newStrategy New strategy address
+     */
+    function updateStrategy(address newStrategy) external onlyAdmin {
+        if (newStrategy == address(0)) revert ZeroAddress();
+        if (IERC4626(newStrategy).asset() != asset) revert InvalidStrategy();
+
+        address oldStrategy = underlyingVault;
+        underlyingVault = newStrategy;
+
+        emit StrategyUpdated(oldStrategy, newStrategy);
     }
 
-    // ============ Internal Functions ============
-    
-    function _calculatePricePerShare() internal view returns (uint256) {
-        if (_totalShares == 0) return PRECISION;
-        return (totalAssets() * PRECISION) / _totalShares;
-    }
-
-    function _mint(address to, uint256 shares) internal {
-        _totalShares += shares;
-        _shares[to] += shares;
-    }
-
-    function _burn(address from, uint256 shares) internal {
-        _totalShares -= shares;
-        _shares[from] -= shares;
-    }
-
-    function _addMember(address member) internal {
-        if (_isMember[member]) return;
-        
-        _isMember[member] = true;
-        _memberList.push(member);
-        
-        _members[member] = GroupVaultTypes.Member({
-            totalDeposited: 0,
-            shares: 0,
-            joinedAt: block.timestamp,
-            isActive: true
-        });
-
-        emit MemberAdded(member, block.timestamp);
-    }
-
-    // ============ Admin Functions ============
-    
+    /**
+     * @notice Update donation recipient
+     * @param newRecipient New recipient address
+     */
     function updateDonationRecipient(address newRecipient) external onlyAdmin {
         if (newRecipient == address(0)) revert ZeroAddress();
+
         address oldRecipient = donationRecipient;
         donationRecipient = newRecipient;
+
         emit DonationRecipientUpdated(oldRecipient, newRecipient);
     }
 
+    /**
+     * @notice Update minimum deposit
+     * @param newMinDeposit New minimum deposit
+     */
     function updateMinDeposit(uint256 newMinDeposit) external onlyAdmin {
-        uint256 oldAmount = minDeposit;
+        if (newMinDeposit == 0) revert InvalidMinDeposit();
+
+        uint256 oldMinDeposit = minDeposit;
         minDeposit = newMinDeposit;
-        emit MinDepositUpdated(oldAmount, newMinDeposit);
+
+        emit MinDepositUpdated(oldMinDeposit, newMinDeposit);
     }
 
+    /**
+     * @notice Update deposit cap
+     * @param newDepositCap New deposit cap
+     */
+    function updateDepositCap(uint256 newDepositCap) external onlyAdmin {
+        uint256 oldDepositCap = depositCap;
+        depositCap = newDepositCap;
+
+        emit DepositCapUpdated(oldDepositCap, newDepositCap);
+    }
+
+    /**
+     * @notice Pause vault
+     */
     function pause() external onlyAdmin whenNotPaused {
         isPaused = true;
         emit VaultPause(admin, block.timestamp);
     }
 
+    /**
+     * @notice Unpause vault
+     */
     function unpause() external onlyAdmin whenPaused {
         isPaused = false;
         emit VaultUnpaused(admin, block.timestamp);
+    }
+
+    /**
+     * @notice Add new member
+     */
+    function _addMember(address member) internal {
+        _members[member] = GroupVaultTypes.Member({
+            isActive: true,
+            joinedAt: block.timestamp,
+            shares: 0,
+            totalDeposited: 0
+        });
+        _isMember[member] = true;
+        _memberList.push(member);
+
+        emit MemberAdded(member, block.timestamp);
+    }
+
+    /**
+     * @notice Mint shares
+     */
+    function _mint(address to, uint256 amount) internal {
+        _totalShares += amount;
+        _balances[to] += amount;
+    }
+
+    /**
+     * @notice Burn shares
+     */
+    function _burn(address from, uint256 amount) internal {
+        _balances[from] -= amount;
+        _totalShares -= amount;
+    }
+
+    /**
+     * @notice Safe transfer from
+     */
+    function _safeTransferFrom(
+        address token,
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        (bool success, bytes memory _data) = token.call(
+            abi.encodeWithSignature(
+                "transferFrom(address,address,uint256)",
+                from,
+                to,
+                amount
+            )
+        );
+        if (!success) revert TransferFailed();
+    }
+
+    /**
+     * @notice Safe approve
+     */
+    function _safeApprove(
+        address token,
+        address spender,
+        uint256 amount
+    ) internal {
+        (bool success, bytes memory data) = token.call(
+            abi.encodeWithSignature("approve(address,uint256)", spender, amount)
+        );
+        require(
+            success && (data.length == 0 || abi.decode(data, (bool))),
+            "Approve failed"
+        );
     }
 }

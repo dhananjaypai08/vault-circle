@@ -1,0 +1,3 @@
+npm run contracts:format:check
+npm run contracts:lint
+npm run frontend:build

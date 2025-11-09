@@ -4,10 +4,19 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "frontend:build": "cd frontend && npm run build",
+    "contracts:lint": "cd contracts && npm run lint",
+    "contracts:format": "cd contracts && npm run format",
+    "contracts:format:check": "cd contracts && npm run format:check",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "prettier-plugin-solidity": "^2.2.0"
+  }
 }

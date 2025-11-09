@@ -1,23 +1,19 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.25;
 
 import {GroupVault} from "./GroupVault.sol";
 import {IGroupVaultFactory} from "../../interfaces/IGroupVaultFactory.sol";
 
 /**
  * @title GroupVaultFactory
- * @notice Factory contract for creating Group Vaults
- * @dev Deploys new GroupVault instances with YDS pattern
+ * @notice Factory contract for creating Group Vaults with YDS pattern
+ * @dev Deploys new GroupVault instances and tracks them
  */
 contract GroupVaultFactory is IGroupVaultFactory {
-    // ============ Storage ============
-    
     address[] private _allVaults;
     mapping(address => address[]) private _vaultsByCreator;
     mapping(address => bool) private _isVault;
 
-    // ============ External Functions ============
-    
     /**
      * @notice Create a new Group Vault
      * @param name Name of the vault
@@ -29,7 +25,7 @@ contract GroupVaultFactory is IGroupVaultFactory {
      * @return vault Address of created vault
      */
     function createVault(
-        string memory name,
+        string calldata name,
         address asset,
         address strategy,
         address donationRecipient,
@@ -43,29 +39,37 @@ contract GroupVaultFactory is IGroupVaultFactory {
         if (minDeposit == 0) revert InvalidMinDeposit();
 
         // Deploy new vault
-        vault = address(new GroupVault(
-            name,
-            asset,
-            strategy,
-            donationRecipient,
-            msg.sender, // creator is admin
-            minDeposit,
-            depositCap
-        ));
+        vault = address(
+            new GroupVault(
+                name,
+                asset,
+                strategy,
+                donationRecipient,
+                msg.sender,
+                minDeposit,
+                depositCap
+            )
+        );
 
-        // Track vault
         _allVaults.push(vault);
         _vaultsByCreator[msg.sender].push(vault);
         _isVault[vault] = true;
 
-        emit VaultCreated(vault, msg.sender, name, asset, strategy, donationRecipient);
+        emit VaultCreated(
+            vault,
+            msg.sender,
+            name,
+            asset,
+            strategy,
+            donationRecipient
+        );
 
         return vault;
     }
 
-    // ============ View Functions ============
-    
-    function getVaultsByCreator(address creator) external view returns (address[] memory) {
+    function getVaultsByCreator(
+        address creator
+    ) external view returns (address[] memory) {
         return _vaultsByCreator[creator];
     }
 

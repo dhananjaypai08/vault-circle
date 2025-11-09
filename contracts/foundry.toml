@@ -2,10 +2,30 @@
 src = "contracts"
 out = "out"
 libs = ["lib"]
-solc_version = "0.8.20"
+solc_version = "0.8.25"
 optimizer = true
 optimizer_runs = 200
 via_ir = false
+remappings = [
+    "@octant-v2-core/=lib/octant-v2-core/src/",
+    "@openzeppelin/=lib/openzeppelin-contracts/contracts/",
+    "@morpho-v2/=lib/vault-v2/src/",
+    "@aave-vault/=lib/Aave-Vault/src",
+]
 
 [rpc_endpoints]
 katana = "https://rpc.katana.network"
+katanaTestnet = "https://rpc.tatara.katanarpc.com"
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = true
+int_types = "long"
+
+[fuzz]
+runs = 256
+
+[invariant]
+runs = 256
+depth = 15
