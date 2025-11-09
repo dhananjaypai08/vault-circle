@@ -9,6 +9,7 @@
     "contracts:lint": "cd contracts && npm run lint",
     "contracts:format": "cd contracts && npm run format",
     "contracts:format:check": "cd contracts && npm run format:check",
+    "contracts:test": "cd contracts && npm run test",
     "prepare": "husky"
   },
   "keywords": [],

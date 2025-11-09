@@ -7,7 +7,7 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "forge test -vvv",
     "lint": "solhint `src/**/**.sol`",
     "format": "prettier --write --plugin=prettier-plugin-solidity 'src/**/*.sol'",
     "format:check": "prettier --list-different --plugin=prettier-plugin-solidity 'src/**/*.sol'"
