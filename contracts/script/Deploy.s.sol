@@ -68,8 +68,8 @@ contract DeployMocks is Script {
         console.log("\n=== Deploying Mock Katana Vault ===");
         MockKatanaVault katanaVault = new MockKatanaVault(
             mockUSDC,
-            "Katana USDC Vault",
-            "kUSDC",
+            "Katana AUSD Vault",
+            "KAUSD",
             100 // 1% yield per harvest
         );
         mockKatanaVault = address(katanaVault);

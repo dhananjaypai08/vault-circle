@@ -1,12 +1,10 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
 import { defineChain } from 'viem';
-import { KATANA_CHAIN_ID } from './contracts';
 
-// Define Katana mainnet
-export const katana = defineChain({
-  id: Number(KATANA_CHAIN_ID),
-  name: 'Katana',
-  network: 'katana',
+export const katanaTestnet = defineChain({
+  id: 129399,
+  name: 'Katana Testnet',
+  network: 'katana-testnet',
   nativeCurrency: {
     decimals: 18,
     name: 'Ether',
@@ -14,24 +12,25 @@ export const katana = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ['https://rpc.katana.network'],
+      http: ['https://rpc.tatara.katanarpc.com'],
     },
     public: {
-      http: ['https://rpc.katana.network'],
+      http: ['https://rpc.tatara.katanarpc.com'],
     },
   },
   blockExplorers: {
     default: {
-      name: 'Katana Explorer',
-      url: 'https://explorer.katana.network',
+      name: 'Katana Testnet Explorer',
+      url: 'https://rpc.tatara.katanarpc.com',
     },
   },
   contracts: {},
+  testnet: true,
 });
 
 export const config = getDefaultConfig({
-  appName: 'Group Vault',
+  appName: 'Group Vault with Yearn',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'YOUR_PROJECT_ID',
-  chains: [katana],
+  chains: [katanaTestnet],
   ssr: true,
 });

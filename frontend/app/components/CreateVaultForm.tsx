@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { FACTORY_ADDRESS, FACTORY_ABI, ASSETS, getAssetConfig } from '../utils/contracts';
+import { MORPHO_COMPOUNDER_FACTORY_ABI, ASSETS, getAssetConfig, YDS_STRATEGY, STRATEGY_FACTORY, FACTORY_ABI } from '../utils/contracts';
 import { parseInputAmount } from '../utils/utils';
 import { Address } from 'viem';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Check } from 'lucide-react';
+import { useAccount } from 'wagmi';
 
 interface CreateVaultFormProps {
   onSuccess: () => void;
@@ -23,6 +24,7 @@ export default function CreateVaultForm({ onSuccess }: CreateVaultFormProps) {
     minDeposit: '',
     depositCap: '',
   });
+  const { address: userAddress, isConnected } = useAccount();
 
   const { writeContract, data: hash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
@@ -38,15 +40,15 @@ export default function CreateVaultForm({ onSuccess }: CreateVaultFormProps) {
     const depositCap = formData.depositCap
       ? parseInputAmount(formData.depositCap, selectedAsset.decimals)
       : 0n;
-
+    console.log(formData.name, selectedAsset.tokenAddress, selectedAsset.vaultAddress, formData.donationRecipient, minDeposit, depositCap)
     writeContract({
-      address: FACTORY_ADDRESS,
+      address: "0x6eEcd2C4E5B47ef96758cc6edb208Dd8D3d813a1",
       abi: FACTORY_ABI,
       functionName: 'createVault',
       args: [
         formData.name,
         selectedAsset.tokenAddress,
-        selectedAsset.vaultAddress,
+        selectedAsset.vaultAddress as `0x${string}`,
         formData.donationRecipient as Address,
         minDeposit,
         depositCap,

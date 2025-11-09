@@ -33,7 +33,7 @@ export default function VaultCard({ address, onSelect }: VaultCardProps) {
   });
 
   const assetConfig = vaultInfo?.strategy
-    ? Object.values(ASSETS).find(a => a.vaultAddress.toLowerCase() === vaultInfo.strategy.toLowerCase())
+    ? Object.values(ASSETS).find(a => (a as any).vaultAddress.toLowerCase() === vaultInfo.strategy.toLowerCase())
     : undefined;
 
   const decimals = assetConfig?.decimals || 18;
@@ -56,8 +56,8 @@ export default function VaultCard({ address, onSelect }: VaultCardProps) {
 
   if (!vaultInfo || !performance) return null;
 
-  const totalAssets = performance.totalAssets || 0n;
-  const yieldDonated = performance.yieldDonated || 0n;
+  const totalAssets = (performance as any).totalAssets || 0n;
+  const yieldDonated = (performance as any).yieldDonated || 0n;
   const memberCount = members?.length || 0;
 
   return (

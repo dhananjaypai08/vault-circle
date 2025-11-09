@@ -14,13 +14,13 @@ export default function VaultList({ onSelectVault }: VaultListProps) {
   const { address: userAddress } = useAccount();
 
   const { data: allVaults, isLoading: isLoadingAll } = useReadContract({
-    address: FACTORY_ADDRESS,
+    address: '0x6eEcd2C4E5B47ef96758cc6edb208Dd8D3d813a1',
     abi: FACTORY_ABI,
     functionName: 'getAllVaults',
   });
 
   const { data: myVaults, isLoading: isLoadingMy } = useReadContract({
-    address: FACTORY_ADDRESS,
+    address: '0x6eEcd2C4E5B47ef96758cc6edb208Dd8D3d813a1',
     abi: FACTORY_ABI,
     functionName: 'getVaultsByCreator',
     args: userAddress ? [userAddress] : undefined,
