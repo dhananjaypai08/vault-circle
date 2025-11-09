@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "forge-std/Script.sol";
-import { YieldDonatingTokenizedStrategy } from "@octant-v2-core/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
+import { YieldDonatingTokenizedStrategy } from "@octant-v2-core/src/strategies/yieldDonating/YieldDonatingTokenizedStrategy.sol";
 
 contract DeployOctantImpl is Script {
     function run() external {

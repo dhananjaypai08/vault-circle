@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Script.sol";
-import "../src/core/GroupVaultFactory.sol";
+import "../src/factories/GroupVaultFactory.sol";
 import "../test/MockERC20.sol";
 import "../test/MockKatanaVault.sol";
 

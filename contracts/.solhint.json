@@ -1,7 +1,7 @@
 {
   "extends": "solhint:recommended",
   "rules": {
-    "compiler-version": ["error", "^0.8.25"],
+    "compiler-version": ["error", "^0.8.20"],
     "avoid-throw": "error",
     "quotes": [
       "error",
@@ -32,11 +32,12 @@
     "no-unused-import": "error",
         "func-visibility": ["error", { "ignoreConstructors": true }],
     "state-visibility": "error",
-    "reentrancy": "error",
+    "reentrancy": "error", 
     "no-inline-assembly": "off",
     "no-complex-fallback": "warn",
     "multiple-sends": "error",
     "avoid-tx-origin": "error",
-    "mixed-case-variable": "off"
+    "mixed-case-variable": "off",
+    "no-console": "off"
   }
 }

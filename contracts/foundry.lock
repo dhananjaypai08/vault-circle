@@ -1,4 +1,7 @@
 {
+  "lib/Aave-Vault": {
+    "rev": "497d18da638e6d6f5899f560449f564111e480e1"
+  },
   "lib/forge-std": {
     "tag": {
       "name": "v1.11.0",

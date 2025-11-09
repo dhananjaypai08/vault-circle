@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import {IERC4626} from "@morpho-v2/interfaces/IERC4626.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {IGroupVault} from "../../interfaces/IGroupVault.sol";
 import {GroupVaultTypes} from "../../types/GroupVaultTypes.sol";
 
