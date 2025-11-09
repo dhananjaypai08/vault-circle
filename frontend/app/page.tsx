@@ -61,7 +61,7 @@ export default function Home() {
             <section className="text-center space-y-6">
               <h2 className="text-4xl font-bold tracking-tight">Manage Group Vaults</h2>
               <p className="text-[var(--color-muted-foreground)] text-lg max-w-2xl mx-auto">
-                Create and manage collaborative vaults powered by Katana and Yearn.
+                Create and manage collaborative vaults powered by Katana.
               </p>
             </section>
 
